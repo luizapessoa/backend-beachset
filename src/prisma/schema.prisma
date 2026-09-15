@@ -1,0 +1,267 @@
+// ============================================================
+// BeachSet - schema.prisma (MVP)
+// PostgreSQL 14+
+// ============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ============================================================
+// ENUMS
+// ============================================================
+
+enum NivelHabilidade {
+  INICIANTE
+  INTERMEDIARIO
+  AVANCADO
+}
+
+enum PosicaoPreferencial {
+  ESQUERDA
+  DIREITA
+  AMBAS
+}
+
+enum FuncaoTatica {
+  BLOQUEADOR
+  DEFENSOR
+  AMBAS
+}
+
+enum DiaSemana {
+  DOM
+  SEG
+  TER
+  QUA
+  QUI
+  SEX
+  SAB
+}
+
+enum StatusPartida {
+  AGENDADA
+  AGUARDANDO_CONFIRMACAO
+  CONFIRMADA
+  CANCELADA
+}
+
+// ============================================================
+// ATLETA
+// ============================================================
+
+model Atleta {
+  id                  String              @id @default(uuid())
+  nome                String              @db.VarChar(120)
+  email               String              @unique @db.VarChar(160)
+  senhaHash           String              @map("senha_hash")
+  nivelHabilidade     NivelHabilidade     @map("nivel_habilidade")
+  posicaoPreferencial PosicaoPreferencial @map("posicao_preferencial")
+  funcaoTatica        FuncaoTatica        @map("funcao_tatica")
+  cidade              String?             @db.VarChar(80)
+  criadoEm            DateTime            @default(now()) @map("criado_em")
+
+  disponibilidades Disponibilidade[]
+  duplas           ComposicaoDupla[]
+  comunidades      Pertence[]
+
+  @@map("atleta")
+}
+
+// ============================================================
+// DISPONIBILIDADE
+// ============================================================
+
+model Disponibilidade {
+  id         String    @id @default(uuid())
+  atletaId   String    @map("atleta_id")
+  atleta     Atleta    @relation(fields: [atletaId], references: [id], onDelete: Cascade)
+
+  diaSemana  DiaSemana @map("dia_semana")
+  horaInicio DateTime  @map("hora_inicio") @db.Time()
+  horaFim    DateTime  @map("hora_fim") @db.Time()
+
+  // Evita cadastrar exatamente o mesmo horário
+  // para o mesmo atleta.
+  @@unique([atletaId, diaSemana, horaInicio])
+
+  @@map("disponibilidade")
+}
+
+// ============================================================
+// COMUNIDADE
+// ============================================================
+
+model Comunidade {
+  id        String     @id @default(uuid())
+  nome      String     @db.VarChar(120)
+  cidade    String?    @db.VarChar(80)
+  criadoEm  DateTime   @default(now()) @map("criado_em")
+
+  membros Pertence[]
+
+  // Permite comunidades com o mesmo nome
+  // em cidades diferentes.
+  @@unique([nome, cidade])
+
+  @@map("comunidade")
+}
+
+// ============================================================
+// ATLETA x COMUNIDADE
+// ============================================================
+
+model Pertence {
+  atletaId     String     @map("atleta_id")
+  atleta       Atleta     @relation(fields: [atletaId], references: [id], onDelete: Cascade)
+
+  comunidadeId String     @map("comunidade_id")
+  comunidade   Comunidade @relation(fields: [comunidadeId], references: [id], onDelete: Cascade)
+
+  entrouEm     DateTime   @default(now()) @map("entrou_em")
+
+  // Um atleta não pode pertencer duas vezes
+  // à mesma comunidade.
+  @@id([atletaId, comunidadeId])
+
+  @@map("pertence")
+}
+
+// ============================================================
+// DUPLA
+// ============================================================
+
+model Dupla {
+  id        String   @id @default(uuid())
+  criadoEm  DateTime @default(now()) @map("criado_em")
+
+  // Cada dupla deve possuir 2 atletas.
+  atletas  ComposicaoDupla[]
+
+  partidas JogaPartida[]
+
+  // Resultados em que esta dupla foi vencedora.
+  resultadosVencedora Resultado[]
+
+  @@map("dupla")
+}
+
+// ============================================================
+// ATLETA x DUPLA
+// ============================================================
+//
+// Regra de negócio:
+// - uma dupla deve possuir exatamente 2 atletas;
+// - o mesmo atleta não pode aparecer duas vezes
+//   na mesma dupla.
+//
+// A quantidade exata de 2 atletas deve ser garantida
+// pela camada de serviço/transação da aplicação.
+// ============================================================
+
+model ComposicaoDupla {
+  atletaId String @map("atleta_id")
+  atleta   Atleta @relation(fields: [atletaId], references: [id], onDelete: Cascade)
+
+  duplaId  String @map("dupla_id")
+  dupla    Dupla  @relation(fields: [duplaId], references: [id], onDelete: Cascade)
+
+  // Impede o mesmo atleta de ser associado
+  // duas vezes à mesma dupla.
+  @@id([atletaId, duplaId])
+
+  @@map("compoe")
+}
+
+// ============================================================
+// PARTIDA
+// ============================================================
+
+model Partida {
+  id        String        @id @default(uuid())
+  dataHora  DateTime      @map("data_hora")
+  local     String?       @db.VarChar(120)
+  status    StatusPartida @default(AGENDADA)
+  criadoEm  DateTime      @default(now()) @map("criado_em")
+
+  duplas    JogaPartida[]
+  resultado Resultado?
+
+  @@map("partida")
+}
+
+// ============================================================
+// DUPLA x PARTIDA
+// ============================================================
+//
+// Regra de negócio:
+// - cada partida deve possuir exatamente 2 duplas.
+//
+// O @@id impede a mesma dupla de ser adicionada
+// duas vezes à mesma partida.
+//
+// A quantidade exata de 2 duplas deve ser validada
+// pela camada de serviço/transação da aplicação.
+// ============================================================
+
+model JogaPartida {
+  duplaId   String  @map("dupla_id")
+  dupla     Dupla   @relation(fields: [duplaId], references: [id], onDelete: Cascade)
+
+  partidaId String  @map("partida_id")
+  partida   Partida @relation(fields: [partidaId], references: [id], onDelete: Cascade)
+
+  @@id([duplaId, partidaId])
+
+  @@map("joga")
+}
+
+// ============================================================
+// RESULTADO
+// ============================================================
+
+model Resultado {
+  id                  String   @id @default(uuid())
+
+  partidaId           String   @unique @map("partida_id")
+  partida             Partida  @relation(fields: [partidaId],references: [id], onDelete: Cascade)
+
+  // FK real para a dupla vencedora.
+  duplaVencedoraId    String   @map("dupla_vencedora_id")
+  duplaVencedora      Dupla    @relation(fields: [duplaVencedoraId], references: [id], onDelete: Restrict)
+
+  // ----------------------------
+  // Placar do Set 1
+  // ----------------------------
+
+  placarSet1DuplaA    Int      @map("placar_set1_dupla_a") @db.SmallInt
+  placarSet1DuplaB    Int      @map("placar_set1_dupla_b") @db.SmallInt
+
+  // ----------------------------
+  // Placar do Set 2
+  // ----------------------------
+
+  placarSet2DuplaA    Int      @map("placar_set2_dupla_a") @db.SmallInt
+  placarSet2DuplaB    Int      @map("placar_set2_dupla_b") @db.SmallInt
+
+  // ----------------------------
+  // Placar do Set 3
+  // ----------------------------
+
+  placarSet3DuplaA    Int?     @map("placar_set3_dupla_a") @db.SmallInt
+  placarSet3DuplaB    Int?     @map("placar_set3_dupla_b") @db.SmallInt
+
+  // ----------------------------
+  // Confirmação
+  // ----------------------------
+
+  confirmadoAdversario Boolean  @default(false) @map("confirmado_adversario")
+
+  registradoEm         DateTime @default(now()) @map("registrado_em")
+
+  @@map("resultado")
+}
