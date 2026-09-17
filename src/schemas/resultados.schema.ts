@@ -1,0 +1,1 @@
+// validação dos dados externos com ZOD

@@ -1,8 +1,3 @@
-// ============================================================
-// BeachSet - schema.prisma (MVP)
-// PostgreSQL 14+
-// ============================================================
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -11,257 +6,127 @@ datasource db {
   provider = "postgresql"
 }
 
-// ============================================================
-// ENUMS
-// ============================================================
-
-enum NivelHabilidade {
-  INICIANTE
-  INTERMEDIARIO
-  AVANCADO
-}
-
-enum PosicaoPreferencial {
-  ESQUERDA
-  DIREITA
-  AMBAS
-}
-
-enum FuncaoTatica {
-  BLOQUEADOR
-  DEFENSOR
-  AMBAS
-}
-
-enum DiaSemana {
-  DOM
-  SEG
-  TER
-  QUA
-  QUI
-  SEX
-  SAB
-}
-
-enum StatusPartida {
-  AGENDADA
-  AGUARDANDO_CONFIRMACAO
-  CONFIRMADA
-  CANCELADA
-}
-
-// ============================================================
-// ATLETA
-// ============================================================
-
 model Atleta {
-  id                  String              @id @default(uuid())
-  nome                String              @db.VarChar(120)
-  email               String              @unique @db.VarChar(160)
-  senhaHash           String              @map("senha_hash")
-  nivelHabilidade     NivelHabilidade     @map("nivel_habilidade")
-  posicaoPreferencial PosicaoPreferencial @map("posicao_preferencial")
-  funcaoTatica        FuncaoTatica        @map("funcao_tatica")
-  cidade              String?             @db.VarChar(80)
-  criadoEm            DateTime            @default(now()) @map("criado_em")
-
-  disponibilidades Disponibilidade[]
-  duplas           ComposicaoDupla[]
-  comunidades      Pertence[]
+  id_atleta           Int                    @id @default(autoincrement())
+  nome_atleta         String                 @db.VarChar(100)
+  email               String                 @unique @db.VarChar(150)
+  telefone_celular    String?                @db.VarChar(20)
+  cidade              String?                @db.VarChar(80)
+  nivelHabilidade     nivel_habilidade_enum? @map("nivel_habilidade")
+  posicaoPreferencial String?                @map("posicao_preferencial") @db.VarChar(30)
+  senha_hash          String                 @db.VarChar(255)
+  compoe              ComposicaoDupla[]
+  disponibilidade     Disponibilidade[]
+  pertence            Pertence[]
 
   @@map("atleta")
 }
 
-// ============================================================
-// DISPONIBILIDADE
-// ============================================================
-
 model Disponibilidade {
-  id         String    @id @default(uuid())
-  atletaId   String    @map("atleta_id")
-  atleta     Atleta    @relation(fields: [atletaId], references: [id], onDelete: Cascade)
+  id_disponibilidade Int             @id @default(autoincrement())
+  diaSemana          dia_semana_enum @map("dia_semana")
+  horario_inicio     DateTime        @db.Time(6)
+  horario_fim        DateTime        @db.Time(6)
+  id_atleta          Int
+  atleta             Atleta          @relation(fields: [id_atleta], references: [id_atleta], onDelete: Cascade, onUpdate: NoAction, map: "fk_disponibilidade_atleta")
 
-  diaSemana  DiaSemana @map("dia_semana")
-  horaInicio DateTime  @map("hora_inicio") @db.Time()
-  horaFim    DateTime  @map("hora_fim") @db.Time()
-
-  // Evita cadastrar exatamente o mesmo horário
-  // para o mesmo atleta.
-  @@unique([atletaId, diaSemana, horaInicio])
-
+  @@index([id_atleta], map: "idx_disponibilidade_atleta")
   @@map("disponibilidade")
 }
 
-// ============================================================
-// COMUNIDADE
-// ============================================================
-
 model Comunidade {
-  id        String     @id @default(uuid())
-  nome      String     @db.VarChar(120)
-  cidade    String?    @db.VarChar(80)
-  criadoEm  DateTime   @default(now()) @map("criado_em")
-
-  membros Pertence[]
-
-  // Permite comunidades com o mesmo nome
-  // em cidades diferentes.
-  @@unique([nome, cidade])
+  id_comunidade Int        @id @default(autoincrement())
+  nome_grupo    String     @db.VarChar(100)
+  descricao     String?
+  partida       Partida[]
+  pertence      Pertence[]
 
   @@map("comunidade")
 }
 
-// ============================================================
-// ATLETA x COMUNIDADE
-// ============================================================
-
 model Pertence {
-  atletaId     String     @map("atleta_id")
-  atleta       Atleta     @relation(fields: [atletaId], references: [id], onDelete: Cascade)
+  id_atleta     Int
+  id_comunidade Int
+  atleta        Atleta     @relation(fields: [id_atleta], references: [id_atleta], onDelete: Cascade, onUpdate: NoAction, map: "fk_pertence_atleta")
+  comunidade    Comunidade @relation(fields: [id_comunidade], references: [id_comunidade], onDelete: Cascade, onUpdate: NoAction, map: "fk_pertence_comunidade")
 
-  comunidadeId String     @map("comunidade_id")
-  comunidade   Comunidade @relation(fields: [comunidadeId], references: [id], onDelete: Cascade)
-
-  entrouEm     DateTime   @default(now()) @map("entrou_em")
-
-  // Um atleta não pode pertencer duas vezes
-  // à mesma comunidade.
-  @@id([atletaId, comunidadeId])
-
+  @@id([id_atleta, id_comunidade])
+  @@index([id_comunidade], map: "idx_pertence_comunidade")
   @@map("pertence")
 }
 
-// ============================================================
-// DUPLA
-// ============================================================
-
 model Dupla {
-  id        String   @id @default(uuid())
-  criadoEm  DateTime @default(now()) @map("criado_em")
-
-  // Cada dupla deve possuir 2 atletas.
-  atletas  ComposicaoDupla[]
-
-  partidas JogaPartida[]
-
-  // Resultados em que esta dupla foi vencedora.
-  resultadosVencedora Resultado[]
+  id_dupla   Int               @id @default(autoincrement())
+  nome_dupla String            @db.VarChar(100)
+  compoe     ComposicaoDupla[]
+  joga       JogaPartida[]
 
   @@map("dupla")
 }
 
-// ============================================================
-// ATLETA x DUPLA
-// ============================================================
-//
-// Regra de negócio:
-// - uma dupla deve possuir exatamente 2 atletas;
-// - o mesmo atleta não pode aparecer duas vezes
-//   na mesma dupla.
-//
-// A quantidade exata de 2 atletas deve ser garantida
-// pela camada de serviço/transação da aplicação.
-// ============================================================
-
 model ComposicaoDupla {
-  atletaId String @map("atleta_id")
-  atleta   Atleta @relation(fields: [atletaId], references: [id], onDelete: Cascade)
+  id_atleta Int
+  id_dupla  Int
+  atleta    Atleta @relation(fields: [id_atleta], references: [id_atleta], onDelete: Cascade, onUpdate: NoAction, map: "fk_compoe_atleta")
+  dupla     Dupla  @relation(fields: [id_dupla], references: [id_dupla], onDelete: Cascade, onUpdate: NoAction, map: "fk_compoe_dupla")
 
-  duplaId  String @map("dupla_id")
-  dupla    Dupla  @relation(fields: [duplaId], references: [id], onDelete: Cascade)
-
-  // Impede o mesmo atleta de ser associado
-  // duas vezes à mesma dupla.
-  @@id([atletaId, duplaId])
-
+  @@id([id_atleta, id_dupla])
+  @@index([id_dupla], map: "idx_compoe_dupla")
   @@map("compoe")
 }
 
-// ============================================================
-// PARTIDA
-// ============================================================
-
 model Partida {
-  id        String        @id @default(uuid())
-  dataHora  DateTime      @map("data_hora")
-  local     String?       @db.VarChar(120)
-  status    StatusPartida @default(AGENDADA)
-  criadoEm  DateTime      @default(now()) @map("criado_em")
+  id_partida     Int           @id @default(autoincrement())
+  dataHora       DateTime      @map("data_hora") @db.Timestamp(6)
+  tipo_partida   String?       @db.VarChar(30)
+  status_partida String        @default("agendada") @db.VarChar(20)
+  id_comunidade  Int
+  joga           JogaPartida[]
+  comunidade     Comunidade    @relation(fields: [id_comunidade], references: [id_comunidade], onUpdate: NoAction, map: "fk_partida_comunidade")
+  resultado      Resultado[]
 
-  duplas    JogaPartida[]
-  resultado Resultado?
-
+  @@index([id_comunidade], map: "idx_partida_comunidade")
+  @@index([dataHora], map: "idx_partida_data_hora")
   @@map("partida")
 }
 
-// ============================================================
-// DUPLA x PARTIDA
-// ============================================================
-//
-// Regra de negócio:
-// - cada partida deve possuir exatamente 2 duplas.
-//
-// O @@id impede a mesma dupla de ser adicionada
-// duas vezes à mesma partida.
-//
-// A quantidade exata de 2 duplas deve ser validada
-// pela camada de serviço/transação da aplicação.
-// ============================================================
-
 model JogaPartida {
-  duplaId   String  @map("dupla_id")
-  dupla     Dupla   @relation(fields: [duplaId], references: [id], onDelete: Cascade)
+  id_dupla   Int
+  id_partida Int
+  dupla      Dupla   @relation(fields: [id_dupla], references: [id_dupla], onDelete: Cascade, onUpdate: NoAction, map: "fk_joga_dupla")
+  partida    Partida @relation(fields: [id_partida], references: [id_partida], onDelete: Cascade, onUpdate: NoAction, map: "fk_joga_partida")
 
-  partidaId String  @map("partida_id")
-  partida   Partida @relation(fields: [partidaId], references: [id], onDelete: Cascade)
-
-  @@id([duplaId, partidaId])
-
+  @@id([id_dupla, id_partida])
+  @@index([id_partida], map: "idx_joga_partida")
   @@map("joga")
 }
 
-// ============================================================
-// RESULTADO
-// ============================================================
-
 model Resultado {
-  id                  String   @id @default(uuid())
+  id_resultado  Int     @id @default(autoincrement())
+  numero_set    Int     @db.SmallInt
+  pontos_dupla1 Int     @default(0) @db.SmallInt
+  pontos_dupla2 Int     @default(0) @db.SmallInt
+  id_partida    Int
+  partida       Partida @relation(fields: [id_partida], references: [id_partida], onDelete: Cascade, onUpdate: NoAction, map: "fk_resultado_partida")
 
-  partidaId           String   @unique @map("partida_id")
-  partida             Partida  @relation(fields: [partidaId],references: [id], onDelete: Cascade)
-
-  // FK real para a dupla vencedora.
-  duplaVencedoraId    String   @map("dupla_vencedora_id")
-  duplaVencedora      Dupla    @relation(fields: [duplaVencedoraId], references: [id], onDelete: Restrict)
-
-  // ----------------------------
-  // Placar do Set 1
-  // ----------------------------
-
-  placarSet1DuplaA    Int      @map("placar_set1_dupla_a") @db.SmallInt
-  placarSet1DuplaB    Int      @map("placar_set1_dupla_b") @db.SmallInt
-
-  // ----------------------------
-  // Placar do Set 2
-  // ----------------------------
-
-  placarSet2DuplaA    Int      @map("placar_set2_dupla_a") @db.SmallInt
-  placarSet2DuplaB    Int      @map("placar_set2_dupla_b") @db.SmallInt
-
-  // ----------------------------
-  // Placar do Set 3
-  // ----------------------------
-
-  placarSet3DuplaA    Int?     @map("placar_set3_dupla_a") @db.SmallInt
-  placarSet3DuplaB    Int?     @map("placar_set3_dupla_b") @db.SmallInt
-
-  // ----------------------------
-  // Confirmação
-  // ----------------------------
-
-  confirmadoAdversario Boolean  @default(false) @map("confirmado_adversario")
-
-  registradoEm         DateTime @default(now()) @map("registrado_em")
-
+  @@unique([id_partida, numero_set], map: "uq_resultado_partida_set")
+  @@index([id_partida], map: "idx_resultado_partida")
   @@map("resultado")
+}
+
+enum dia_semana_enum {
+  seg
+  ter
+  qua
+  qui
+  sex
+  sab
+  dom
+}
+
+enum nivel_habilidade_enum {
+  iniciante
+  intermediario
+  avancado
+  profissional
 }
